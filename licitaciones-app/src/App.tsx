@@ -87,7 +87,7 @@ const getEstadoOCLabel = (codigo: number) => {
   return map[codigo] || `Estado ${codigo}`;
 };
 
-const MAX_PAGINAS = 4;
+const MAX_PAGINAS = 1;
 
 const RANGOS_MONTO = {
   micro:   { label: "Hasta $1M",     min: 0,           max: 1_000_000   },
@@ -187,8 +187,7 @@ export default function App() {
     }
 
     for (let pagina = 0; pagina < MAX_PAGINAS; pagina++) {
-      await new Promise((r) => setTimeout(r, 1200));
-      setLoadingMsg(`Cargando más licitaciones... (${pagina + 1}/${MAX_PAGINAS})`);
+await new Promise((r) => setTimeout(r, 3000));      setLoadingMsg(`Cargando más licitaciones... (${pagina + 1}/${MAX_PAGINAS})`);
 
       const fechas = acumulado
         .map((i) => i.FechaPublicacion || i.FechaCierre)
@@ -322,11 +321,11 @@ export default function App() {
     if (status === "open") result = result.filter((i) => new Date(i.close) >= now);
     if (status === "closed") result = result.filter((i) => new Date(i.close) < now);
     if (tipoFiltro !== "all") result = result.filter((i) => i.tipo === tipoFiltro);
-    if (montoMin) result = result.filter((i) => i.monto === null || i.monto >= Number(montoMin));
-    if (montoMax) result = result.filter((i) => i.monto === null || i.monto <= Number(montoMax));
+    if (montoMin) result = result.filter((i) => i.monto !== null && i.monto >= Number(montoMin));
+    if (montoMax) result = result.filter((i) => i.monto !== null && i.monto <= Number(montoMax));
     if (montoRango !== "all") {
-      const { min, max } = RANGOS_MONTO[montoRango];
-      result = result.filter((i) => i.monto === null || (i.monto >= min && i.monto <= max));
+    const { min, max } = RANGOS_MONTO[montoRango];
+    result = result.filter((i) => i.monto !== null && i.monto >= min && i.monto <= max);
     }
     result.sort((a, b) => {
       const diff = new Date(b.close).getTime() - new Date(a.close).getTime();
