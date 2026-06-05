@@ -37,36 +37,39 @@ type Licitacion = {
   monto: number | null;
   fechaPublicacion: string;
   isNew?: boolean;
+  categoria?: string;
 };
 
-// ── CONSTANTES ───────────────────────────────────────────────────────────────
+type Alerta = {
+  id: string;
+  nombre: string;
+  keywords: string[];
+  categorias: string[];
+  montoMin: number | null;
+  activa: boolean;
+};
 
-const CATEGORIAS_OFICIALES = [
-  "Tecnología y Telecomunicaciones",
-  "Construcción e Infraestructura",
-  "Salud y Medicina",
-  "Educación y Capacitación",
-  "Aseo y Medio Ambiente",
-  "Alimentación y Catering",
-  "Transporte y Logística",
-  "Seguridad y Vigilancia",
-  "Servicios Profesionales",
-  "Equipamiento y Mobiliario",
-  "Diseño y Comunicación",
+// ── CATEGORÍAS PARA RUBRO DISEÑO/MARKETING ──────────────────────────────────
+
+const CATEGORIAS_RUBRO = [
+  { id: "diseno",       label: "🎨 Diseño Gráfico",       keywords: ["diseño", "diseño gráfico", "branding", "identidad visual", "logotipo", "logo", "gráfica", "ilustración", "infografía"] },
+  { id: "marketing",    label: "📢 Marketing y Publicidad", keywords: ["marketing", "publicidad", "campaña", "pauta", "medios", "redes sociales", "community", "digital", "seo", "sem", "influencer"] },
+  { id: "imprenta",     label: "🖨️ Impresión y Señalética", keywords: ["impresión", "imprenta", "señalética", "gigantografía", "letrero", "banner", "vinilo", "ploteo", "cartelería", "rotulación", "señal"] },
+  { id: "pop",          label: "📦 Material POP",           keywords: ["pop", "merchandising", "material publicitario", "artículo promocional", "merchandising", "souvenir", "regalo corporativo", "bolsa corporativa"] },
+  { id: "eventos",      label: "🎪 Eventos y Producción",   keywords: ["evento", "producción", "montaje", "stand", "feria", "exposición", "congreso", "lanzamiento", "activación", "ceremonia"] },
+  { id: "mobiliario",   label: "🪑 Mobiliario",             keywords: ["mobiliario", "mueble", "silla", "escritorio", "estantería", "locker", "archivador", "mesa", "recepción", "modular"] },
+  { id: "tecnologia",   label: "🖥️ Equipamiento TI",        keywords: ["computador", "laptop", "notebook", "tablet", "monitor", "impresora", "escáner", "proyector", "pantalla", "hardware", "equipamiento tecnológico", "software"] },
+  { id: "audiovisual",  label: "🎬 Audiovisual",            keywords: ["video", "audiovisual", "fotografía", "foto", "filmación", "edición", "animación", "motion", "streaming", "producción audiovisual"] },
+  { id: "web",          label: "💻 Web y Desarrollo",       keywords: ["web", "sitio web", "página web", "desarrollo web", "aplicación", "plataforma digital", "e-commerce", "ux", "ui"] },
+  { id: "consultoria",  label: "💼 Consultoría",            keywords: ["consultoría", "asesoría", "estrategia", "comunicaciones", "relaciones públicas", "prensa", "imagen corporativa"] },
 ];
 
-const CATEGORIA_KEYWORDS: Record<string, string[]> = {
-  "Tecnología y Telecomunicaciones": ["tecnología", "ti", "software", "hardware", "computador", "red", "sistema", "digital", "informática", "telecom"],
-  "Construcción e Infraestructura": ["construcción", "obra", "infraestructura", "edificio", "pavimento", "reparación", "arquitectura"],
-  "Salud y Medicina": ["salud", "médico", "hospital", "clínica", "farmacia", "medicamento", "insumo médico"],
-  "Educación y Capacitación": ["educación", "capacitación", "formación", "curso", "taller", "colegio", "universidad"],
-  "Aseo y Medio Ambiente": ["aseo", "limpieza", "reciclaje", "residuos", "medio ambiente", "sanitización"],
-  "Alimentación y Catering": ["alimentación", "catering", "casino", "comida", "raciones", "alimentos"],
-  "Transporte y Logística": ["transporte", "logística", "vehículo", "flota", "traslado", "despacho"],
-  "Seguridad y Vigilancia": ["seguridad", "vigilancia", "guardia", "cctv", "cámara", "alarma"],
-  "Servicios Profesionales": ["consultoría", "asesoría", "legal", "contable", "auditoría", "ingeniería"],
-  "Equipamiento y Mobiliario": ["mobiliario", "mueble", "equipamiento", "silla", "escritorio", "bodega"],
-  "Diseño y Comunicación": ["diseño", "branding", "señalética", "publicidad", "impresión", "evento", "marketing", "gráfica", "comunicación", "campaña"],
+const getCategoriaItem = (titulo: string) => {
+  const t = titulo.toLowerCase();
+  for (const cat of CATEGORIAS_RUBRO) {
+    if (cat.keywords.some((kw) => t.includes(kw))) return cat;
+  }
+  return null;
 };
 
 const getMercadoPublicoURL = (id: string) =>
@@ -96,7 +99,20 @@ const RANGOS_MONTO = {
   grande:  { label: "Más de $100M",  min: 100_000_000, max: Infinity    },
 };
 
-// ── HELPERS localStorage con try/catch ───────────────────────────────────────
+// Días restantes hasta cierre
+const getDiasRestantes = (fecha: string) => {
+  const diff = (new Date(fecha).getTime() - Date.now()) / 86400000;
+  return Math.ceil(diff);
+};
+
+const getDiasLabel = (dias: number) => {
+  if (dias < 0) return null;
+  if (dias === 0) return "Vence hoy";
+  if (dias === 1) return "1 día";
+  return `${dias} días`;
+};
+
+// ── HELPERS localStorage ──────────────────────────────────────────────────────
 
 function lsGet<T>(key: string, fallback: T): T {
   try {
@@ -110,9 +126,11 @@ function lsGet<T>(key: string, fallback: T): T {
 function lsSet(key: string, value: unknown): void {
   try {
     localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // Safari privado u otros contextos sin localStorage
-  }
+  } catch {}
+}
+
+function uid() {
+  return Math.random().toString(36).slice(2, 9);
 }
 
 // ── COMPONENTE PRINCIPAL ─────────────────────────────────────────────────────
@@ -122,31 +140,39 @@ export default function App() {
   const [ordenesCompra, setOrdenesCompra] = useState<OrdenCompraAPI[]>([]);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"all" | "open" | "closed">("open");
-  const [order, setOrder] = useState<"new" | "old">("new");
+  const [order, setOrder] = useState<"new" | "old" | "monto_asc" | "monto_desc">("new");
   const [loading, setLoading] = useState(true);
   const [loadingMsg, setLoadingMsg] = useState("Iniciando...");
   const [visible, setVisible] = useState(20);
   const [favorites, setFavorites] = useState<string[]>(() => lsGet("favorites", []));
+  const [vistaFavoritos, setVistaFavoritos] = useState(false);
   const [selected, setSelected] = useState<Licitacion | null>(null);
   const [detalle, setDetalle] = useState<Detalle>(null);
   const [montoMin, setMontoMin] = useState("");
   const [montoMax, setMontoMax] = useState("");
   const [montoRango, setMontoRango] = useState<"all" | "micro" | "pequeno" | "mediano" | "grande">("all");
   const [tipoFiltro, setTipoFiltro] = useState<"all" | "licitacion" | "compra_agil">("all");
-  const [alertKeywords, setAlertKeywords] = useState<string[]>(() => lsGet("alertKeywords", []));
-  const [alertCategorias, setAlertCategorias] = useState<string[]>(() => lsGet("alertCategorias", []));
-  const [newKeywordInput, setNewKeywordInput] = useState("");
-  const [showAlertConfig, setShowAlertConfig] = useState(false);
+  const [categoriaFiltro, setCategoriaFiltro] = useState<string>("all");
   const [newAlerts, setNewAlerts] = useState<string[]>([]);
   const [showNewBadge, setShowNewBadge] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState(false);
   const prevIdsRef = useRef<Set<string>>(new Set());
 
-  // ── PERSISTENCIA ─────────────────────────────────────────────────────────
+  // ── ALERTAS MEJORADAS ─────────────────────────────────────────────────────
+  const [alertas, setAlertas] = useState<Alerta[]>(() => lsGet("alertasV2", []));
+  const alertasRef = useRef<Alerta[]>([]);
+  useEffect(() => { alertasRef.current = alertas; }, [alertas]);
+  const [showAlertConfig, setShowAlertConfig] = useState(false);
+  const [editingAlerta, setEditingAlerta] = useState<Alerta | null>(null);
+  const [newAlertaNombre, setNewAlertaNombre] = useState("");
+  const [newAlertaKeyword, setNewAlertaKeyword] = useState("");
+  const [newAlertaKeywords, setNewAlertaKeywords] = useState<string[]>([]);
+  const [newAlertaCategorias, setNewAlertaCategorias] = useState<string[]>([]);
+  const [newAlertaMontoMin, setNewAlertaMontoMin] = useState("");
 
+  // ── PERSISTENCIA ─────────────────────────────────────────────────────────
   useEffect(() => { lsSet("favorites", favorites); }, [favorites]);
-  useEffect(() => { lsSet("alertKeywords", alertKeywords); }, [alertKeywords]);
-  useEffect(() => { lsSet("alertCategorias", alertCategorias); }, [alertCategorias]);
+  useEffect(() => { lsSet("alertasV2", alertas); }, [alertas]);
 
   // ── HELPERS ──────────────────────────────────────────────────────────────
 
@@ -163,7 +189,7 @@ export default function App() {
     setTimeout(() => setCopyFeedback(false), 1500);
   };
 
-  // ── PAGINACIÓN LICITACIONES ───────────────────────────────────────────────
+  // ── PAGINACIÓN ────────────────────────────────────────────────────────────
 
   const fetchLicitacionesPaginadas = async (): Promise<LicitacionAPI[]> => {
     const acumulado: LicitacionAPI[] = [];
@@ -187,7 +213,8 @@ export default function App() {
     }
 
     for (let pagina = 0; pagina < MAX_PAGINAS; pagina++) {
-await new Promise((r) => setTimeout(r, 3000));      setLoadingMsg(`Cargando más licitaciones... (${pagina + 1}/${MAX_PAGINAS})`);
+      await new Promise((r) => setTimeout(r, 3000));
+      setLoadingMsg(`Cargando más licitaciones... (${pagina + 1}/${MAX_PAGINAS})`);
 
       const fechas = acumulado
         .map((i) => i.FechaPublicacion || i.FechaCierre)
@@ -222,7 +249,6 @@ await new Promise((r) => setTimeout(r, 3000));      setLoadingMsg(`Cargando más
   };
 
   // ── FETCH PRINCIPAL ───────────────────────────────────────────────────────
-  // useCallback para poder incluirlo correctamente en dependencias de useEffect
 
   const fetchData = useCallback(async () => {
     try {
@@ -238,25 +264,30 @@ await new Promise((r) => setTimeout(r, 3000));      setLoadingMsg(`Cargando más
       const dataOC = await resOC.json();
       const listadoOC: OrdenCompraAPI[] = dataOC.Listado || [];
 
-      // Detectar nuevas relevantes para alertas
-      const todosKeywords = [
-        ...alertKeywords,
-        ...alertCategorias.flatMap((cat) => CATEGORIA_KEYWORDS[cat] || []),
-      ].map((k) => k.toLowerCase());
+      // Detectar nuevas con alertas mejoradas
+      if (prevIdsRef.current.size > 0 && alertasRef.current.some((a) => a.activa)) {
+        const todasNombres: Record<string, { nombre: string; monto: number | null }> = {};
+        listadoLic.forEach((i) => { todasNombres[i.CodigoExterno] = { nombre: i.Nombre, monto: i.MontoEstimado ? Number(i.MontoEstimado) : null }; });
+        listadoOC.forEach((i) => { todasNombres[i.Codigo] = { nombre: i.Nombre, monto: i.MontoTotal ? Number(i.MontoTotal) : null }; });
 
-      if (prevIdsRef.current.size > 0 && todosKeywords.length > 0) {
-        const todasNombres: Record<string, string> = {};
-        listadoLic.forEach((i) => { todasNombres[i.CodigoExterno] = i.Nombre; });
-        listadoOC.forEach((i) => { todasNombres[i.Codigo] = i.Nombre; });
+        const nuevasIds: string[] = [];
+        for (const [id, { nombre, monto }] of Object.entries(todasNombres)) {
+          if (prevIdsRef.current.has(id)) continue;
+          for (const alerta of alertasRef.current) {
+            if (!alerta.activa) continue;
+            const titulo = nombre.toLowerCase();
+            const todosKw = [
+              ...alerta.keywords,
+              ...alerta.categorias.flatMap((cid) => CATEGORIAS_RUBRO.find((c) => c.id === cid)?.keywords || []),
+            ];
+            const match = todosKw.some((kw) => titulo.includes(kw.toLowerCase()));
+            const montoOk = alerta.montoMin === null || monto === null || monto >= alerta.montoMin;
+            if (match && montoOk) { nuevasIds.push(id); break; }
+          }
+        }
 
-        const nuevas = Object.keys(todasNombres).filter((id) => {
-          if (prevIdsRef.current.has(id)) return false;
-          const titulo = (todasNombres[id] || "").toLowerCase();
-          return todosKeywords.some((kw) => titulo.includes(kw));
-        });
-
-        if (nuevas.length > 0) {
-          setNewAlerts(nuevas);
+        if (nuevasIds.length > 0) {
+          setNewAlerts(nuevasIds);
           setShowNewBadge(true);
         }
       }
@@ -275,11 +306,11 @@ await new Promise((r) => setTimeout(r, 3000));      setLoadingMsg(`Cargando más
       setLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [alertKeywords, alertCategorias]);
+  }, []);
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 5 * 60 * 1000);
+    const interval = setInterval(fetchData, 15 * 60 * 1000);
     return () => clearInterval(interval);
   }, [fetchData]);
 
@@ -295,6 +326,7 @@ await new Promise((r) => setTimeout(r, 3000));      setLoadingMsg(`Cargando más
       monto: item.MontoEstimado ? Number(item.MontoEstimado) : null,
       fechaPublicacion: item.FechaPublicacion || "",
       isNew: newAlerts.includes(item.CodigoExterno),
+      categoria: getCategoriaItem(item.Nombre)?.id,
     }));
 
     const oc: Licitacion[] = ordenesCompra.map((item) => ({
@@ -308,6 +340,7 @@ await new Promise((r) => setTimeout(r, 3000));      setLoadingMsg(`Cargando más
       monto: item.MontoTotal ? Number(item.MontoTotal) : null,
       fechaPublicacion: item.FechaCreacion || "",
       isNew: newAlerts.includes(item.Codigo),
+      categoria: getCategoriaItem(item.Nombre)?.id,
     }));
 
     return [...lic, ...oc];
@@ -318,28 +351,32 @@ await new Promise((r) => setTimeout(r, 3000));      setLoadingMsg(`Cargando más
   const filtered = useMemo(() => {
     const now = new Date();
     let result = mapped.filter((i) => i.title.toLowerCase().includes(search.toLowerCase()));
+    if (vistaFavoritos) result = result.filter((i) => favorites.includes(i.id));
     if (status === "open") result = result.filter((i) => new Date(i.close) >= now);
     if (status === "closed") result = result.filter((i) => new Date(i.close) < now);
     if (tipoFiltro !== "all") result = result.filter((i) => i.tipo === tipoFiltro);
+    if (categoriaFiltro !== "all") result = result.filter((i) => i.categoria === categoriaFiltro);
     if (montoMin) result = result.filter((i) => i.monto !== null && i.monto >= Number(montoMin));
     if (montoMax) result = result.filter((i) => i.monto !== null && i.monto <= Number(montoMax));
     if (montoRango !== "all") {
-    const { min, max } = RANGOS_MONTO[montoRango];
-    result = result.filter((i) => i.monto !== null && i.monto >= min && i.monto <= max);
+      const { min, max } = RANGOS_MONTO[montoRango];
+      result = result.filter((i) => i.monto !== null && i.monto >= min && i.monto <= max);
     }
     result.sort((a, b) => {
+      if (order === "monto_asc") return (a.monto ?? 0) - (b.monto ?? 0);
+      if (order === "monto_desc") return (b.monto ?? 0) - (a.monto ?? 0);
       const diff = new Date(b.close).getTime() - new Date(a.close).getTime();
       return order === "new" ? diff : -diff;
     });
     result.sort((a, b) => (b.isNew ? 1 : 0) - (a.isNew ? 1 : 0));
     return result;
-  }, [mapped, search, status, order, tipoFiltro, montoMin, montoMax, montoRango]);
+  }, [mapped, search, status, order, tipoFiltro, categoriaFiltro, montoMin, montoMax, montoRango, vistaFavoritos, favorites]);
 
   // ── STATS ─────────────────────────────────────────────────────────────────
 
   const stats = useMemo(() => {
     let open = 0, closed = 0, urgent = 0, lic = 0, ca = 0;
-    filtered.forEach((i) => {
+    mapped.forEach((i) => {
       const s = getStatus(i.close);
       if (s === "open") open++;
       if (s === "closed") closed++;
@@ -347,8 +384,13 @@ await new Promise((r) => setTimeout(r, 3000));      setLoadingMsg(`Cargando más
       if (i.tipo === "licitacion") lic++;
       else ca++;
     });
-    return { total: filtered.length, open, closed, urgent, licitaciones: lic, comprasAgiles: ca, favorites: favorites.length };
-  }, [filtered, favorites]);
+    // Vencen esta semana
+    const enSemana = mapped.filter((i) => {
+      const d = getDiasRestantes(i.close);
+      return d >= 0 && d <= 7;
+    }).length;
+    return { total: mapped.length, open, closed, urgent, licitaciones: lic, comprasAgiles: ca, favorites: favorites.length, enSemana };
+  }, [mapped, favorites]);
 
   // ── INFINITE SCROLL ───────────────────────────────────────────────────────
 
@@ -383,10 +425,85 @@ await new Promise((r) => setTimeout(r, 3000));      setLoadingMsg(`Cargando más
     }
   };
 
-  const addKeyword = () => {
-    const kw = newKeywordInput.trim().toLowerCase();
-    if (kw && !alertKeywords.includes(kw)) setAlertKeywords((prev) => [...prev, kw]);
-    setNewKeywordInput("");
+  // ── EXPORTAR CSV ─────────────────────────────────────────────────────────
+
+  const exportCSV = () => {
+    const header = ["ID", "Título", "Organismo", "Tipo", "Monto", "Cierre", "Estado", "Categoría"];
+    const rows = filtered.slice(0, visible).map((i) => {
+      const s = getStatus(i.close);
+      const cat = CATEGORIAS_RUBRO.find((c) => c.id === i.categoria)?.label || "—";
+      return [
+        i.id,
+        `"${i.title.replace(/"/g, '""')}"`,
+        `"${i.org.replace(/"/g, '""')}"`,
+        i.tipo === "compra_agil" ? "Compra Ágil" : "Licitación",
+        i.monto ? i.monto : "",
+        new Date(i.close).toLocaleDateString("es-CL"),
+        s === "open" ? "Abierta" : s === "urgent" ? "Urgente" : "Cerrada",
+        cat,
+      ].join(",");
+    });
+    const csv = [header.join(","), ...rows].join("\n");
+    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `licitaciones_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // ── GESTIÓN DE ALERTAS ───────────────────────────────────────────────────
+
+  const resetFormAlerta = () => {
+    setNewAlertaNombre("");
+    setNewAlertaKeyword("");
+    setNewAlertaKeywords([]);
+    setNewAlertaCategorias([]);
+    setNewAlertaMontoMin("");
+    setEditingAlerta(null);
+  };
+
+  const guardarAlerta = () => {
+    if (!newAlertaNombre.trim()) return;
+    if (editingAlerta) {
+      setAlertas((prev) => prev.map((a) =>
+        a.id === editingAlerta.id
+          ? { ...a, nombre: newAlertaNombre.trim(), keywords: newAlertaKeywords, categorias: newAlertaCategorias, montoMin: newAlertaMontoMin ? Number(newAlertaMontoMin) : null }
+          : a
+      ));
+    } else {
+      const nueva: Alerta = {
+        id: uid(),
+        nombre: newAlertaNombre.trim(),
+        keywords: newAlertaKeywords,
+        categorias: newAlertaCategorias,
+        montoMin: newAlertaMontoMin ? Number(newAlertaMontoMin) : null,
+        activa: true,
+      };
+      setAlertas((prev) => [...prev, nueva]);
+    }
+    resetFormAlerta();
+  };
+
+  const editarAlerta = (a: Alerta) => {
+    setEditingAlerta(a);
+    setNewAlertaNombre(a.nombre);
+    setNewAlertaKeywords(a.keywords);
+    setNewAlertaCategorias(a.categorias);
+    setNewAlertaMontoMin(a.montoMin ? String(a.montoMin) : "");
+  };
+
+  const toggleAlerta = (id: string) =>
+    setAlertas((prev) => prev.map((a) => a.id === id ? { ...a, activa: !a.activa } : a));
+
+  const eliminarAlerta = (id: string) =>
+    setAlertas((prev) => prev.filter((a) => a.id !== id));
+
+  const addKwAlerta = () => {
+    const kw = newAlertaKeyword.trim().toLowerCase();
+    if (kw && !newAlertaKeywords.includes(kw)) setNewAlertaKeywords((p) => [...p, kw]);
+    setNewAlertaKeyword("");
   };
 
   // ── CLASES BASE ───────────────────────────────────────────────────────────
@@ -415,7 +532,7 @@ await new Promise((r) => setTimeout(r, 3000));      setLoadingMsg(`Cargando más
         <div className="flex flex-col sm:flex-row sm:items-start gap-3 justify-between">
           <div className="space-y-2">
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-2xl font-bold tracking-tight">Licitaciones</h1>
+              <h1 className="text-2xl font-bold tracking-tight">🗂️ Licitaciones</h1>
               {showNewBadge && (
                 <button
                   onClick={() => setShowNewBadge(false)}
@@ -431,14 +548,14 @@ await new Promise((r) => setTimeout(r, 3000));      setLoadingMsg(`Cargando más
                 </span>
               )}
             </div>
-            <div className="flex gap-2">
-              {(["new", "old"] as const).map((val) => (
+            <div className="flex gap-2 flex-wrap">
+              {(["new", "old", "monto_desc", "monto_asc"] as const).map((val) => (
                 <button
                   key={val}
                   onClick={() => setOrder(val)}
                   className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${order === val ? "bg-blue-500/20 border-blue-500/60 text-blue-300" : "border-slate-700 text-slate-400 hover:border-slate-500"}`}
                 >
-                  {val === "new" ? "Más recientes" : "Más antiguas"}
+                  {val === "new" ? "Más recientes" : val === "old" ? "Más antiguas" : val === "monto_desc" ? "Mayor monto" : "Menor monto"}
                 </button>
               ))}
             </div>
@@ -452,74 +569,169 @@ await new Promise((r) => setTimeout(r, 3000));      setLoadingMsg(`Cargando más
               onChange={(e) => setSearch(e.target.value)}
             />
             <button
+              onClick={() => { setVistaFavoritos((v) => !v); }}
+              className={`text-sm px-3 py-2 rounded-lg border transition-colors whitespace-nowrap ${vistaFavoritos ? "bg-pink-500/20 border-pink-400/60 text-pink-300" : "border-slate-700 text-slate-300 hover:border-pink-400/60 hover:text-pink-300"}`}
+            >
+              ♥ Favoritos {favorites.length > 0 ? `(${favorites.length})` : ""}
+            </button>
+            <button
               onClick={() => setShowAlertConfig((v) => !v)}
               className={`text-sm px-3 py-2 rounded-lg border transition-colors whitespace-nowrap ${showAlertConfig ? "bg-amber-500/20 border-amber-400/60 text-amber-300" : "border-slate-700 text-slate-300 hover:border-amber-400/60 hover:text-amber-300"}`}
             >
-              🔔 Alertas {alertKeywords.length + alertCategorias.length > 0 ? `(${alertKeywords.length + alertCategorias.length})` : ""}
+              🔔 Alertas {alertas.filter((a) => a.activa).length > 0 ? `(${alertas.filter((a) => a.activa).length})` : ""}
+            </button>
+            <button
+              onClick={exportCSV}
+              className="text-sm px-3 py-2 rounded-lg border border-slate-700 text-slate-300 hover:border-emerald-400/60 hover:text-emerald-300 transition-colors whitespace-nowrap"
+            >
+              ↓ CSV
             </button>
           </div>
         </div>
 
-        {/* PANEL ALERTAS */}
+        {/* PANEL ALERTAS MEJORADO */}
         {showAlertConfig && (
-          <div className="bg-amber-500/5 border border-amber-500/30 rounded-xl p-5 space-y-4">
+          <div className="bg-amber-500/5 border border-amber-500/30 rounded-xl p-5 space-y-5">
             <div>
-              <h3 className="text-amber-400 font-semibold text-sm mb-1">⚙️ Alertas de nuevas publicaciones</h3>
-              <p className="text-slate-400 text-xs">Te avisaremos cuando aparezcan nuevas licitaciones o compras ágiles que coincidan con tu rubro.</p>
+              <h3 className="text-amber-400 font-semibold text-sm mb-1">🔔 Mis Alertas</h3>
+              <p className="text-slate-400 text-xs">Crea alertas personalizadas para tu rubro. Recibirás una notificación cuando aparezca algo relevante.</p>
             </div>
-            <div className="space-y-2">
-              <p className="text-slate-300 text-xs font-semibold uppercase tracking-wider">📂 Categorías oficiales</p>
-              <div className="flex flex-wrap gap-2">
-                {CATEGORIAS_OFICIALES.map((cat) => (
-                  <button
-                    key={cat}
-                    onClick={() => setAlertCategorias((prev) => prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat])}
-                    className={`text-xs px-3 py-1 rounded-full border transition-colors ${alertCategorias.includes(cat) ? "bg-blue-500/20 border-blue-400/60 text-blue-300 font-semibold" : "border-slate-600 text-slate-400 hover:border-blue-400/60 hover:text-blue-300"}`}
-                  >
-                    {cat}
-                  </button>
+
+            {/* Lista de alertas existentes */}
+            {alertas.length > 0 && (
+              <div className="space-y-2">
+                {alertas.map((alerta) => (
+                  <div key={alerta.id} className={`flex items-start gap-3 p-3 rounded-lg border ${alerta.activa ? "bg-slate-800/60 border-slate-700" : "bg-slate-900/40 border-slate-800 opacity-60"}`}>
+                    <button
+                      onClick={() => toggleAlerta(alerta.id)}
+                      className={`mt-0.5 w-8 h-4 rounded-full transition-colors shrink-0 relative ${alerta.activa ? "bg-amber-400" : "bg-slate-600"}`}
+                    >
+                      <span className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${alerta.activa ? "left-4" : "left-0.5"}`} />
+                    </button>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-slate-100">{alerta.nombre}</p>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {alerta.keywords.map((kw) => (
+                          <span key={kw} className="text-xs bg-blue-500/15 border border-blue-500/30 text-blue-300 px-2 py-0.5 rounded-full">{kw}</span>
+                        ))}
+                        {alerta.categorias.map((cid) => {
+                          const cat = CATEGORIAS_RUBRO.find((c) => c.id === cid);
+                          return cat ? <span key={cid} className="text-xs bg-purple-500/15 border border-purple-500/30 text-purple-300 px-2 py-0.5 rounded-full">{cat.label}</span> : null;
+                        })}
+                        {alerta.montoMin && (
+                          <span className="text-xs bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 px-2 py-0.5 rounded-full">≥ ${Number(alerta.montoMin).toLocaleString("es-CL")}</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex gap-2 shrink-0">
+                      <button onClick={() => editarAlerta(alerta)} className="text-xs text-slate-400 hover:text-blue-300 transition-colors">✏️</button>
+                      <button onClick={() => eliminarAlerta(alerta.id)} className="text-xs text-slate-400 hover:text-red-400 transition-colors">✕</button>
+                    </div>
+                  </div>
                 ))}
               </div>
-            </div>
-            <div className="space-y-2">
-              <p className="text-slate-300 text-xs font-semibold uppercase tracking-wider">🔑 Palabras clave</p>
-              <div className="flex gap-2">
-                <input
-                  className={`${inputCls} flex-1 text-sm px-3 py-1.5`}
-                  placeholder="ej: diseño, señalética, marketing, evento..."
-                  value={newKeywordInput}
-                  onChange={(e) => setNewKeywordInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && addKeyword()}
-                />
-                <button
-                  onClick={addKeyword}
-                  className="bg-blue-500/20 border border-blue-400/60 text-blue-300 text-sm px-4 py-1.5 rounded-lg font-semibold hover:bg-blue-500/30 transition-colors"
-                >
-                  + Agregar
-                </button>
+            )}
+
+            {/* Formulario nueva alerta / editar */}
+            <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4 space-y-3">
+              <p className="text-slate-300 text-xs font-semibold uppercase tracking-wider">
+                {editingAlerta ? "✏️ Editar alerta" : "➕ Nueva alerta"}
+              </p>
+
+              <input
+                className={`${inputCls} w-full text-sm px-3 py-2`}
+                placeholder="Nombre de la alerta (ej: Diseño Región Metropolitana)"
+                value={newAlertaNombre}
+                onChange={(e) => setNewAlertaNombre(e.target.value)}
+              />
+
+              {/* Categorías del rubro */}
+              <div>
+                <p className="text-slate-400 text-xs mb-2">Categorías de tu rubro:</p>
+                <div className="flex flex-wrap gap-2">
+                  {CATEGORIAS_RUBRO.map((cat) => (
+                    <button
+                      key={cat.id}
+                      onClick={() => setNewAlertaCategorias((prev) =>
+                        prev.includes(cat.id) ? prev.filter((c) => c !== cat.id) : [...prev, cat.id]
+                      )}
+                      className={`text-xs px-3 py-1 rounded-full border transition-colors ${newAlertaCategorias.includes(cat.id) ? "bg-purple-500/20 border-purple-400/60 text-purple-300 font-semibold" : "border-slate-600 text-slate-400 hover:border-purple-400/60 hover:text-purple-300"}`}
+                    >
+                      {cat.label}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="flex flex-wrap gap-2 min-h-6">
-                {alertKeywords.length === 0
-                  ? <p className="text-slate-500 text-xs italic">Agrega palabras clave para recibir alertas personalizadas</p>
-                  : alertKeywords.map((kw) => (
+
+              {/* Keywords adicionales */}
+              <div>
+                <p className="text-slate-400 text-xs mb-2">Palabras clave adicionales:</p>
+                <div className="flex gap-2">
+                  <input
+                    className={`${inputCls} flex-1 text-sm px-3 py-1.5`}
+                    placeholder="ej: municipalidad, región de O'Higgins..."
+                    value={newAlertaKeyword}
+                    onChange={(e) => setNewAlertaKeyword(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && addKwAlerta()}
+                  />
+                  <button
+                    onClick={addKwAlerta}
+                    className="bg-blue-500/20 border border-blue-400/60 text-blue-300 text-sm px-4 py-1.5 rounded-lg font-semibold hover:bg-blue-500/30 transition-colors"
+                  >
+                    + Agregar
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {newAlertaKeywords.map((kw) => (
                     <span key={kw} className="inline-flex items-center gap-1.5 bg-blue-500/15 border border-blue-500/30 text-blue-300 text-xs px-2.5 py-0.5 rounded-full">
                       {kw}
-                      <button onClick={() => setAlertKeywords((prev) => prev.filter((k) => k !== kw))} className="text-slate-500 hover:text-red-400 transition-colors leading-none">✕</button>
+                      <button onClick={() => setNewAlertaKeywords((p) => p.filter((k) => k !== kw))} className="text-slate-500 hover:text-red-400 transition-colors">✕</button>
                     </span>
-                  ))
-                }
+                  ))}
+                </div>
+              </div>
+
+              {/* Monto mínimo */}
+              <div>
+                <p className="text-slate-400 text-xs mb-2">Monto mínimo (opcional):</p>
+                <input
+                  type="number"
+                  className={`${inputCls} text-sm px-3 py-1.5 w-48`}
+                  placeholder="ej: 1000000"
+                  value={newAlertaMontoMin}
+                  onChange={(e) => setNewAlertaMontoMin(e.target.value)}
+                />
+                {newAlertaMontoMin && (
+                  <p className="text-xs text-emerald-400 mt-1">${Number(newAlertaMontoMin).toLocaleString("es-CL")}</p>
+                )}
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={guardarAlerta}
+                  disabled={!newAlertaNombre.trim()}
+                  className="bg-amber-500/20 border border-amber-400/60 text-amber-300 text-sm px-5 py-2 rounded-lg font-semibold hover:bg-amber-500/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {editingAlerta ? "Guardar cambios" : "Crear alerta"}
+                </button>
+                {editingAlerta && (
+                  <button onClick={resetFormAlerta} className="text-sm px-4 py-2 rounded-lg border border-slate-700 text-slate-400 hover:bg-slate-800 transition-colors">
+                    Cancelar
+                  </button>
+                )}
               </div>
             </div>
           </div>
         )}
 
         {/* STATS */}
-        <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
+        <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
           {[
             { label: "Total",        value: stats.total,         color: "text-slate-300"   },
             { label: "Abiertas",     value: stats.open,          color: "text-emerald-400" },
-            { label: "Cerradas",     value: stats.closed,        color: "text-red-400"     },
             { label: "Urgentes",     value: stats.urgent,        color: "text-orange-400"  },
+            { label: "Esta semana",  value: stats.enSemana,      color: "text-yellow-400"  },
+            { label: "Cerradas",     value: stats.closed,        color: "text-red-400"     },
             { label: "Favoritos",    value: stats.favorites,     color: "text-pink-400"    },
             { label: "Licitaciones", value: stats.licitaciones,  color: "text-blue-400"    },
             { label: "C. Ágiles",    value: stats.comprasAgiles, color: "text-amber-400"   },
@@ -535,7 +747,8 @@ await new Promise((r) => setTimeout(r, 3000));      setLoadingMsg(`Cargando más
         <div className="flex gap-5">
 
           {/* SIDEBAR */}
-          <aside className="hidden sm:flex flex-col gap-1 w-44 shrink-0">
+          <aside className="hidden sm:flex flex-col gap-1 w-48 shrink-0">
+
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Estado</p>
             {[
               { val: "all" as const,    label: "Todas",    dot: "bg-slate-500"   },
@@ -547,7 +760,7 @@ await new Promise((r) => setTimeout(r, 3000));      setLoadingMsg(`Cargando más
                 onClick={() => setStatus(val)}
                 className={`text-left text-sm px-3 py-2 rounded-lg border transition-colors flex items-center gap-2 ${status === val ? "bg-slate-800 border-slate-600 text-slate-100" : "border-transparent text-slate-400 hover:bg-slate-800/50"}`}
               >
-                <span className={["w-2 h-2 rounded-full shrink-0", dot].join(" ")}></span>
+                <span className={["w-2 h-2 rounded-full shrink-0", dot].join(" ")} />
                 {label}
               </button>
             ))}
@@ -563,8 +776,25 @@ await new Promise((r) => setTimeout(r, 3000));      setLoadingMsg(`Cargando más
                 onClick={() => setTipoFiltro(val)}
                 className={`text-left text-sm px-3 py-2 rounded-lg border transition-colors flex items-center gap-2 ${tipoFiltro === val ? "bg-slate-800 border-slate-600 text-slate-100" : "border-transparent text-slate-400 hover:bg-slate-800/50"}`}
               >
-                <span className={["w-2 h-2 rounded-full shrink-0", dot].join(" ")}></span>
+                <span className={["w-2 h-2 rounded-full shrink-0", dot].join(" ")} />
                 {label}
+              </button>
+            ))}
+
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mt-4 mb-1">Categoría</p>
+            <button
+              onClick={() => setCategoriaFiltro("all")}
+              className={`text-left text-xs px-3 py-2 rounded-lg border transition-colors ${categoriaFiltro === "all" ? "bg-slate-800 border-slate-600 text-slate-100" : "border-transparent text-slate-400 hover:bg-slate-800/50"}`}
+            >
+              Todas
+            </button>
+            {CATEGORIAS_RUBRO.map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => setCategoriaFiltro(cat.id)}
+                className={`text-left text-xs px-3 py-2 rounded-lg border transition-colors leading-snug ${categoriaFiltro === cat.id ? "bg-slate-800 border-slate-600 text-slate-100" : "border-transparent text-slate-400 hover:bg-slate-800/50"}`}
+              >
+                {cat.label}
               </button>
             ))}
 
@@ -573,7 +803,7 @@ await new Promise((r) => setTimeout(r, 3000));      setLoadingMsg(`Cargando más
               <button
                 key={val}
                 onClick={() => setMontoRango(val)}
-                className={`text-left text-xs px-3 py-2 rounded-lg border transition-colors flex items-center gap-2 ${montoRango === val ? "bg-slate-800 border-slate-600 text-slate-100" : "border-transparent text-slate-400 hover:bg-slate-800/50"}`}
+                className={`text-left text-xs px-3 py-2 rounded-lg border transition-colors ${montoRango === val ? "bg-slate-800 border-slate-600 text-slate-100" : "border-transparent text-slate-400 hover:bg-slate-800/50"}`}
               >
                 {val === "all" ? "Cualquier monto" : RANGOS_MONTO[val].label}
               </button>
@@ -605,12 +835,20 @@ await new Promise((r) => setTimeout(r, 3000));      setLoadingMsg(`Cargando más
 
           {/* LISTA */}
           <div className="flex-1 space-y-3 min-w-0">
+            {vistaFavoritos && (
+              <div className="text-xs text-pink-300 bg-pink-500/10 border border-pink-500/20 rounded-lg px-3 py-2">
+                ♥ Mostrando {filtered.length} favorito{filtered.length !== 1 ? "s" : ""}
+              </div>
+            )}
             {filtered.slice(0, visible).length === 0 ? (
               <div className="text-center py-20 text-slate-500 text-sm">No se encontraron resultados</div>
             ) : (
               filtered.slice(0, visible).map((item) => {
                 const isFav = favorites.includes(item.id);
                 const s = getStatus(item.close);
+                const dias = getDiasRestantes(item.close);
+                const diasLabel = getDiasLabel(dias);
+                const cat = CATEGORIAS_RUBRO.find((c) => c.id === item.categoria);
                 return (
                   <div
                     key={item.id}
@@ -627,13 +865,23 @@ await new Promise((r) => setTimeout(r, 3000));      setLoadingMsg(`Cargando más
                         </span>
                       </div>
                       <p className="text-xs text-slate-400 truncate">{item.org}</p>
-                      {item.monto && (
-                        <p className="text-xs text-emerald-400 font-semibold">${item.monto.toLocaleString("es-CL")}</p>
-                      )}
-                      <div>
+                      <div className="flex flex-wrap gap-2 items-center">
+                        {item.monto && (
+                          <span className="text-xs text-emerald-400 font-semibold">${item.monto.toLocaleString("es-CL")}</span>
+                        )}
+                        {cat && (
+                          <span className="text-xs bg-purple-500/10 border border-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full">{cat.label}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap">
                         {s === "open"   && <span className="text-xs bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full">● Abierta</span>}
                         {s === "urgent" && <span className="text-xs bg-orange-500/15 text-orange-400 border border-orange-500/30 px-2 py-0.5 rounded-full">● Urgente</span>}
                         {s === "closed" && <span className="text-xs bg-red-500/15 text-red-400 border border-red-500/30 px-2 py-0.5 rounded-full">● Cerrada</span>}
+                        {diasLabel && (
+                          <span className={`text-xs px-2 py-0.5 rounded-full border ${dias <= 3 ? "bg-orange-500/10 text-orange-300 border-orange-500/20" : "bg-slate-800 text-slate-400 border-slate-700"}`}>
+                            ⏱ {diasLabel}
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div className="flex flex-col gap-2 shrink-0 items-end">
@@ -677,6 +925,12 @@ await new Promise((r) => setTimeout(r, 3000));      setLoadingMsg(`Cargando más
 
             <p className="text-sm text-slate-400">{selected.org}</p>
 
+            {/* Categoría en modal */}
+            {selected.categoria && (() => {
+              const cat = CATEGORIAS_RUBRO.find((c) => c.id === selected.categoria);
+              return cat ? <span className="inline-block text-xs bg-purple-500/15 border border-purple-500/30 text-purple-300 px-2.5 py-0.5 rounded-full">{cat.label}</span> : null;
+            })()}
+
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs text-slate-500">ID: {selected.id}</span>
               <button
@@ -694,6 +948,18 @@ await new Promise((r) => setTimeout(r, 3000));      setLoadingMsg(`Cargando más
                 Ver en MercadoPublico ↗
               </a>
             </div>
+
+            {/* Días restantes en modal */}
+            {(() => {
+              const dias = getDiasRestantes(selected.close);
+              const label = getDiasLabel(dias);
+              if (!label) return null;
+              return (
+                <div className={`text-sm font-medium px-3 py-2 rounded-lg border ${dias <= 3 ? "bg-orange-500/10 text-orange-300 border-orange-500/20" : "bg-slate-800 text-slate-300 border-slate-700"}`}>
+                  ⏱ Cierra en {label}
+                </div>
+              );
+            })()}
 
             <div className="border-t border-slate-800" />
 
