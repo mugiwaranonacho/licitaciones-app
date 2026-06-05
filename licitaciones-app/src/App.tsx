@@ -36,8 +36,10 @@ type Licitacion = {
   tipo: "licitacion" | "compra_agil";
   monto: number | null;
   fechaPublicacion: string;
+  descripcion?: string;
   isNew?: boolean;
   categoria?: string;
+  esRelevante?: boolean;
 };
 
 type Alerta = {
@@ -52,22 +54,48 @@ type Alerta = {
 // ── CATEGORÍAS PARA RUBRO DISEÑO/MARKETING ──────────────────────────────────
 
 const CATEGORIAS_RUBRO = [
-  { id: "diseno",       label: "🎨 Diseño Gráfico",       keywords: ["diseño", "diseño gráfico", "branding", "identidad visual", "logotipo", "logo", "gráfica", "ilustración", "infografía"] },
-  { id: "marketing",    label: "📢 Marketing y Publicidad", keywords: ["marketing", "publicidad", "campaña", "pauta", "medios", "redes sociales", "community", "digital", "seo", "sem", "influencer"] },
-  { id: "imprenta",     label: "🖨️ Impresión y Señalética", keywords: ["impresión", "imprenta", "señalética", "gigantografía", "letrero", "banner", "vinilo", "ploteo", "cartelería", "rotulación", "señal"] },
-  { id: "pop",          label: "📦 Material POP",           keywords: ["pop", "merchandising", "material publicitario", "artículo promocional", "merchandising", "souvenir", "regalo corporativo", "bolsa corporativa"] },
-  { id: "eventos",      label: "🎪 Eventos y Producción",   keywords: ["evento", "producción", "montaje", "stand", "feria", "exposición", "congreso", "lanzamiento", "activación", "ceremonia"] },
-  { id: "mobiliario",   label: "🪑 Mobiliario",             keywords: ["mobiliario", "mueble", "silla", "escritorio", "estantería", "locker", "archivador", "mesa", "recepción", "modular"] },
-  { id: "tecnologia",   label: "🖥️ Equipamiento TI",        keywords: ["computador", "laptop", "notebook", "tablet", "monitor", "impresora", "escáner", "proyector", "pantalla", "hardware", "equipamiento tecnológico", "software"] },
-  { id: "audiovisual",  label: "🎬 Audiovisual",            keywords: ["video", "audiovisual", "fotografía", "foto", "filmación", "edición", "animación", "motion", "streaming", "producción audiovisual"] },
-  { id: "web",          label: "💻 Web y Desarrollo",       keywords: ["web", "sitio web", "página web", "desarrollo web", "aplicación", "plataforma digital", "e-commerce", "ux", "ui"] },
-  { id: "consultoria",  label: "💼 Consultoría",            keywords: ["consultoría", "asesoría", "estrategia", "comunicaciones", "relaciones públicas", "prensa", "imagen corporativa"] },
+  { id: "diseno",      label: "🎨 Diseño Gráfico",        keywords: ["diseño gráfico", "branding", "identidad visual", "logotipo", "logo", "gráfica", "ilustración", "infografía", "material gráfico", "diseño visual", "diseño de imagen", "diseño comunicacional", "diseño editorial", "papelería institucional", "imagen institucional"] },
+  { id: "marketing",   label: "📢 Marketing y Publicidad", keywords: ["marketing", "publicidad", "campaña publicitaria", "pauta", "plan de medios", "medios de comunicación", "redes sociales", "community manager", "seo", "sem", "influencer", "difusión", "comunicacional", "relaciones públicas", "prensa", "imagen corporativa", "plan comunicacional", "estrategia comunicacional"] },
+  { id: "imprenta",    label: "🖨️ Impresión y Señalética", keywords: ["impresión", "imprenta", "señalética", "gigantografía", "letrero", "banner", "vinilo", "ploteo", "cartelería", "rotulación", "material impreso", "folletería", "folleto", "afiche", "díptico", "tríptico", "lienzo", "pasacalle", "roller", "lona", "tótem", "pendón", "pvc impreso", "material publicitario impreso"] },
+  { id: "pop",         label: "📦 Material POP",           keywords: ["material pop", "pop ", "merchandising", "artículo promocional", "souvenir", "regalo corporativo", "bolsa corporativa", "artículos promocionales", "objetos de premiación", "trofeo", "medalla", "galvano", "placa recordatoria", "implementos deportivos", "premiación"] },
+  { id: "eventos",     label: "🎪 Eventos y Producción",   keywords: ["evento", "producción de evento", "montaje", "stand", "feria", "exposición", "congreso", "lanzamiento", "activación", "ceremonia", "producción artística", "servicio artístico", "animación de evento", "organización de evento"] },
+  { id: "mobiliario",  label: "🪑 Mobiliario",             keywords: ["mobiliario", "mueble", "silla", "escritorio", "estantería", "locker", "archivador", "mesa de trabajo", "recepción", "modular", "panel divisorio", "mobiliario de oficina"] },
+  { id: "tecnologia",  label: "🖥️ Equipamiento TI",        keywords: ["computador", "laptop", "notebook", "tablet", "monitor", "impresora", "escáner", "proyector", "pantalla interactiva", "hardware", "equipamiento tecnológico", "equipos informáticos", "periférico", "licencia software", "software de diseño"] },
+  { id: "audiovisual", label: "🎬 Audiovisual",            keywords: ["video", "audiovisual", "fotografía", "filmación", "edición de video", "animación", "motion graphics", "streaming", "producción audiovisual", "registro fotográfico", "registro audiovisual", "spot", "cápsula audiovisual"] },
+  { id: "web",         label: "💻 Web y Desarrollo",       keywords: ["sitio web", "página web", "desarrollo web", "aplicación web", "plataforma digital", "e-commerce", "ux", "ui", "soporte técnico web", "diseño web", "portal web"] },
+  { id: "consultoria", label: "💼 Consultoría Creativa",   keywords: ["consultoría de comunicaciones", "asesoría comunicacional", "estrategia de comunicaciones", "consultoría de imagen", "plan de marketing", "consultoría creativa", "servicio integral de monitoreo", "monitoreo de medios", "análisis de medios", "inteligencia de medios"] },
 ];
 
-const getCategoriaItem = (titulo: string) => {
-  const t = titulo.toLowerCase();
+// Keywords que indican que NO es del rubro (aunque contengan palabras como "diseño")
+const KEYWORDS_EXCLUIR = [
+  "pavimentación", "pavimento", "alcantarillado", "agua potable", "sanitario", "ptas",
+  "hidráulico", "hidrología", "aguas lluvia", "drenaje", "aguas servidas",
+  "obra civil", "construcción", "edificio", "edificación", "infraestructura vial",
+  "skatepark", "plaza", "área verde", "parque", "remodelación", "mejoramiento de infraestructura",
+  "hospitalario", "insumo médico", "clínico", "fármaco", "medicamento", "vaporizador", "artroscopia",
+  "gimnasio municipal", "caballeriza",
+  "eficiencia energética", "fotovoltaico", "bess", "batería de litio",
+  "geología", "topografía", "suelo",
+];
+
+const esRelevanteRubro = (titulo: string, descripcion?: string): boolean => {
+  const texto = (titulo + " " + (descripcion || "")).toLowerCase();
+  // Si tiene keywords de exclusión claras, descartar
+  return !KEYWORDS_EXCLUIR.some((kw) => texto.includes(kw));
+};
+
+const getCategoriaItem = (titulo: string, descripcion?: string) => {
+  // Buscar en título con mayor peso, luego descripción
+  const tituloLower = titulo.toLowerCase();
+  const descLower = (descripcion || "").toLowerCase();
+
   for (const cat of CATEGORIAS_RUBRO) {
-    if (cat.keywords.some((kw) => t.includes(kw))) return cat;
+    // Primero buscar en título
+    if (cat.keywords.some((kw) => tituloLower.includes(kw))) return cat;
+  }
+  for (const cat of CATEGORIAS_RUBRO) {
+    // Luego buscar en descripción
+    if (cat.keywords.some((kw) => descLower.includes(kw))) return cat;
   }
   return null;
 };
@@ -139,7 +167,10 @@ export default function App() {
   const [licitaciones, setLicitaciones] = useState<LicitacionAPI[]>([]);
   const [ordenesCompra, setOrdenesCompra] = useState<OrdenCompraAPI[]>([]);
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<"all" | "open" | "closed">("open");
+  const [searchResults, setSearchResults] = useState<LicitacionAPI[] | null>(null);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [status, setStatus] = useState<"all" | "open" | "closed">("all");
   const [order, setOrder] = useState<"new" | "old" | "monto_asc" | "monto_desc">("new");
   const [loading, setLoading] = useState(true);
   const [loadingMsg, setLoadingMsg] = useState("Iniciando...");
@@ -152,6 +183,7 @@ export default function App() {
   const [montoMax, setMontoMax] = useState("");
   const [montoRango, setMontoRango] = useState<"all" | "micro" | "pequeno" | "mediano" | "grande">("all");
   const [tipoFiltro, setTipoFiltro] = useState<"all" | "licitacion" | "compra_agil">("all");
+  const [filtrarNoRelevantes, setFiltrarNoRelevantes] = useState(true);
   const [categoriaFiltro, setCategoriaFiltro] = useState<string>("all");
   const [newAlerts, setNewAlerts] = useState<string[]>([]);
   const [showNewBadge, setShowNewBadge] = useState(false);
@@ -198,8 +230,10 @@ export default function App() {
     setLoadingMsg("Cargando licitaciones recientes...");
     try {
       const res = await fetch(`/api/mercadopublico?endpoint=licitaciones&estado=publicada`);
+      console.log("📡 HTTP status licitaciones:", res.status);
       if (res.ok) {
         const data = await res.json();
+        console.log("📦 Respuesta API licitaciones:", JSON.stringify(data).slice(0, 500));
         const listado: LicitacionAPI[] = data.Listado || [];
         listado.forEach((i) => {
           if (!idsVistos.has(i.CodigoExterno)) {
@@ -248,6 +282,33 @@ export default function App() {
     return acumulado;
   };
 
+  // ── BÚSQUEDA EN API ───────────────────────────────────────────────────────
+
+  const fetchSearch = useCallback(async (termino: string) => {
+    if (!termino.trim()) {
+      setSearchResults(null);
+      return;
+    }
+    setSearchLoading(true);
+    try {
+      const res = await fetch(`/api/mercadopublico?endpoint=licitaciones&estado=publicada&busqueda=${encodeURIComponent(termino)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setSearchResults(data.Listado || []);
+      }
+    } catch (err) {
+      console.warn("Error búsqueda:", err);
+    } finally {
+      setSearchLoading(false);
+    }
+  }, []);
+
+  const handleSearch = (value: string) => {
+    setSearch(value);
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => fetchSearch(value), 600);
+  };
+
   // ── FETCH PRINCIPAL ───────────────────────────────────────────────────────
 
   const fetchData = useCallback(async () => {
@@ -262,6 +323,7 @@ export default function App() {
 
       setLoadingMsg("Cargando compras ágiles...");
       const dataOC = await resOC.json();
+      console.log("📦 Respuesta API OC:", JSON.stringify(dataOC).slice(0, 300));
       const listadoOC: OrdenCompraAPI[] = dataOC.Listado || [];
 
       // Detectar nuevas con alertas mejoradas
@@ -299,6 +361,8 @@ export default function App() {
 
       setLicitaciones(listadoLic);
       setOrdenesCompra(listadoOC);
+      console.log("✅ Licitaciones cargadas:", listadoLic.length);
+      console.log("✅ Órdenes de compra cargadas:", listadoOC.length);
     } catch (err) {
       console.error("Error fetch:", err);
       setLoadingMsg("Error al cargar datos. Reintentando...");
@@ -317,7 +381,10 @@ export default function App() {
   // ── MAPEO UNIFICADO ───────────────────────────────────────────────────────
 
   const mapped: Licitacion[] = useMemo(() => {
-    const lic: Licitacion[] = licitaciones.map((item) => ({
+    // Si hay búsqueda activa, usar resultados de la API
+    const fuenteLic = searchResults !== null ? searchResults : licitaciones;
+
+    const lic: Licitacion[] = fuenteLic.map((item) => ({
       id: item.CodigoExterno,
       title: item.Nombre || "Sin nombre",
       org: item.Comprador?.NombreOrganismo || "—",
@@ -325,8 +392,10 @@ export default function App() {
       tipo: "licitacion",
       monto: item.MontoEstimado ? Number(item.MontoEstimado) : null,
       fechaPublicacion: item.FechaPublicacion || "",
+      descripcion: item.Descripcion || "",
       isNew: newAlerts.includes(item.CodigoExterno),
-      categoria: getCategoriaItem(item.Nombre)?.id,
+      categoria: getCategoriaItem(item.Nombre, item.Descripcion)?.id,
+      esRelevante: esRelevanteRubro(item.Nombre, item.Descripcion),
     }));
 
     const oc: Licitacion[] = ordenesCompra.map((item) => ({
@@ -341,16 +410,21 @@ export default function App() {
       fechaPublicacion: item.FechaCreacion || "",
       isNew: newAlerts.includes(item.Codigo),
       categoria: getCategoriaItem(item.Nombre)?.id,
+      esRelevante: true,
     }));
 
     return [...lic, ...oc];
-  }, [licitaciones, ordenesCompra, newAlerts]);
+  }, [licitaciones, ordenesCompra, newAlerts, searchResults]);
 
   // ── FILTROS ───────────────────────────────────────────────────────────────
 
   const filtered = useMemo(() => {
     const now = new Date();
-    let result = mapped.filter((i) => i.title.toLowerCase().includes(search.toLowerCase()));
+    // Si hay búsqueda API activa, no filtrar por texto localmente (ya viene filtrado)
+    let result = searchResults !== null
+      ? mapped
+      : mapped.filter((i) => i.title.toLowerCase().includes(search.toLowerCase()));
+    if (filtrarNoRelevantes) result = result.filter((i) => i.esRelevante !== false);
     if (vistaFavoritos) result = result.filter((i) => favorites.includes(i.id));
     if (status === "open") result = result.filter((i) => new Date(i.close) >= now);
     if (status === "closed") result = result.filter((i) => new Date(i.close) < now);
@@ -370,7 +444,7 @@ export default function App() {
     });
     result.sort((a, b) => (b.isNew ? 1 : 0) - (a.isNew ? 1 : 0));
     return result;
-  }, [mapped, search, status, order, tipoFiltro, categoriaFiltro, montoMin, montoMax, montoRango, vistaFavoritos, favorites]);
+  }, [mapped, search, searchResults, filtrarNoRelevantes, status, order, tipoFiltro, categoriaFiltro, montoMin, montoMax, montoRango, vistaFavoritos, favorites]);
 
   // ── STATS ─────────────────────────────────────────────────────────────────
 
@@ -562,12 +636,28 @@ export default function App() {
           </div>
 
           <div className="flex gap-2 items-center flex-wrap">
-            <input
-              className={`${inputCls} text-sm px-3 py-2 w-60`}
-              placeholder="Buscar licitación o compra ágil..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+            <div className="relative">
+              <input
+                className={`${inputCls} text-sm px-3 py-2 w-64 pr-8`}
+                placeholder="Buscar en Mercado Público..."
+                value={search}
+                onChange={(e) => handleSearch(e.target.value)}
+              />
+              {searchLoading && (
+                <span className="absolute right-2.5 top-2.5 w-3.5 h-3.5 border-2 border-slate-600 border-t-blue-400 rounded-full animate-spin" />
+              )}
+              {search && !searchLoading && (
+                <button
+                  onClick={() => { handleSearch(""); }}
+                  className="absolute right-2.5 top-2.5 text-slate-500 hover:text-slate-300 text-xs leading-none"
+                >✕</button>
+              )}
+            </div>
+            {searchResults !== null && (
+              <span className="text-xs text-blue-300 bg-blue-500/10 border border-blue-500/20 px-2 py-1 rounded-lg whitespace-nowrap">
+                🔍 {searchResults.length} resultados en API
+              </span>
+            )}
             <button
               onClick={() => { setVistaFavoritos((v) => !v); }}
               className={`text-sm px-3 py-2 rounded-lg border transition-colors whitespace-nowrap ${vistaFavoritos ? "bg-pink-500/20 border-pink-400/60 text-pink-300" : "border-slate-700 text-slate-300 hover:border-pink-400/60 hover:text-pink-300"}`}
@@ -749,7 +839,16 @@ export default function App() {
           {/* SIDEBAR */}
           <aside className="hidden sm:flex flex-col gap-1 w-48 shrink-0">
 
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Estado</p>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mt-4 mb-1">Filtros</p>
+            <button
+              onClick={() => setFiltrarNoRelevantes((v) => !v)}
+              className={`text-left text-xs px-3 py-2 rounded-lg border transition-colors flex items-center gap-2 ${filtrarNoRelevantes ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300" : "border-slate-700 text-slate-400 hover:bg-slate-800/50"}`}
+            >
+              <span className={`w-2 h-2 rounded-full shrink-0 ${filtrarNoRelevantes ? "bg-emerald-400" : "bg-slate-600"}`} />
+              {filtrarNoRelevantes ? "Solo mi rubro ✓" : "Mostrar todos"}
+            </button>
+
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mt-4 mb-1">Estado</p>
             {[
               { val: "all" as const,    label: "Todas",    dot: "bg-slate-500"   },
               { val: "open" as const,   label: "Abiertas", dot: "bg-emerald-400" },
