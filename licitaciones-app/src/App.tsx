@@ -183,6 +183,8 @@ export default function App() {
   const [montoMax, setMontoMax] = useState("");
   const [montoRango, setMontoRango] = useState<"all" | "micro" | "pequeno" | "mediano" | "grande">("all");
   const [tipoFiltro, setTipoFiltro] = useState<"all" | "licitacion" | "compra_agil">("all");
+  const [diasCargados, setDiasCargados] = useState(7);
+  const [cargandoMas, setCargandoMas] = useState(false);
   const [filtrarNoRelevantes, setFiltrarNoRelevantes] = useState(false);
   const [categoriaFiltro, setCategoriaFiltro] = useState<string>("all");
   const [newAlerts, setNewAlerts] = useState<string[]>([]);
@@ -194,6 +196,8 @@ export default function App() {
   const [alertas, setAlertas] = useState<Alerta[]>(() => lsGet("alertasV2", []));
   const alertasRef = useRef<Alerta[]>([]);
   useEffect(() => { alertasRef.current = alertas; }, [alertas]);
+  const diasCargadosRef = useRef(7);
+  useEffect(() => { diasCargadosRef.current = diasCargados; }, [diasCargados]);
   const [showAlertConfig, setShowAlertConfig] = useState(false);
   const [editingAlerta, setEditingAlerta] = useState<Alerta | null>(null);
   const [newAlertaNombre, setNewAlertaNombre] = useState("");
@@ -244,17 +248,14 @@ export default function App() {
     return `${d}${m}${y}`;
   };
 
-  const fetchLicitacionesPaginadas = async (): Promise<LicitacionAPI[]> => {
+  const fetchLicitacionesPaginadas = async (diasAtras = 7): Promise<LicitacionAPI[]> => {
     const acumulado: LicitacionAPI[] = [];
     const idsVistos = new Set<string>();
-
-    // Traer licitaciones de los últimos 30 días de a 5 días por vez
-    const DIAS_ATRAS = 30;
     const BATCH = 5;
 
-    for (let offset = 0; offset < DIAS_ATRAS; offset += BATCH) {
+    for (let offset = 0; offset < diasAtras; offset += BATCH) {
       const promesas = [];
-      for (let d = offset; d < offset + BATCH && d < DIAS_ATRAS; d++) {
+      for (let d = offset; d < offset + BATCH && d < diasAtras; d++) {
         const fecha = new Date();
         fecha.setDate(fecha.getDate() - d);
         promesas.push(
@@ -268,7 +269,7 @@ export default function App() {
         );
       }
 
-      setLoadingMsg(`Cargando licitaciones... (últimos ${offset + BATCH} días)`);
+      setLoadingMsg(`Cargando licitaciones... (últimos ${Math.min(offset + BATCH, diasAtras)} días)`);
       const resultados = await Promise.all(promesas);
       for (const listado of resultados) {
         for (const item of listado) {
@@ -279,8 +280,7 @@ export default function App() {
         }
       }
 
-      // Pausa entre batches para no saturar la API
-      if (offset + BATCH < DIAS_ATRAS) {
+      if (offset + BATCH < diasAtras) {
         await new Promise((r) => setTimeout(r, 1500));
       }
     }
@@ -324,7 +324,7 @@ export default function App() {
       setLoadingMsg("Conectando con MercadoPublico...");
 
       const [listadoLic, resOC] = await Promise.all([
-        fetchLicitacionesPaginadas(),
+        fetchLicitacionesPaginadas(diasCargadosRef.current),
         fetchConRetry(`/api/mercadopublico?endpoint=ordenesdecompra`),
       ]);
 
@@ -506,7 +506,44 @@ export default function App() {
     }
   };
 
-  // ── EXPORTAR CSV ─────────────────────────────────────────────────────────
+  const cargarMasDias = async () => {
+    setCargandoMas(true);
+    const nuevosDias = diasCargados + 30;
+    setDiasCargados(nuevosDias);
+    diasCargadosRef.current = nuevosDias;
+    // Fetch solo los días nuevos (del día diasCargados al nuevosDias)
+    const nuevas: LicitacionAPI[] = [];
+    const idsExistentes = new Set(licitaciones.map((l) => l.CodigoExterno));
+    const BATCH = 5;
+    for (let offset = diasCargados; offset < nuevosDias; offset += BATCH) {
+      const promesas = [];
+      for (let d = offset; d < offset + BATCH && d < nuevosDias; d++) {
+        const fecha = new Date();
+        fecha.setDate(fecha.getDate() - d);
+        promesas.push(
+          fetchConRetry(`/api/mercadopublico?endpoint=licitaciones&estado=publicada&fecha=${toFechaAPI(fecha)}`)
+            .then(async (res) => {
+              if (!res || !res.ok) return [];
+              const data = await res.json();
+              return (data.Listado || []) as LicitacionAPI[];
+            })
+            .catch(() => [] as LicitacionAPI[])
+        );
+      }
+      const resultados = await Promise.all(promesas);
+      for (const listado of resultados) {
+        for (const item of listado) {
+          if (!idsExistentes.has(item.CodigoExterno)) {
+            idsExistentes.add(item.CodigoExterno);
+            nuevas.push(item);
+          }
+        }
+      }
+      if (offset + BATCH < nuevosDias) await new Promise((r) => setTimeout(r, 1500));
+    }
+    setLicitaciones((prev) => [...prev, ...nuevas]);
+    setCargandoMas(false);
+  };
 
   const exportCSV = () => {
     const header = ["ID", "Título", "Organismo", "Tipo", "Monto", "Cierre", "Estado", "Categoría"];
@@ -1007,6 +1044,29 @@ export default function App() {
                   </div>
                 );
               })
+            )}
+
+            {/* BOTÓN CARGAR MÁS DÍAS */}
+            {!vistaFavoritos && searchResults === null && (
+              <div className="text-center py-6">
+                <p className="text-xs text-slate-500 mb-3">
+                  Mostrando licitaciones de los últimos <span className="text-slate-300 font-semibold">{diasCargados} días</span>
+                </p>
+                <button
+                  onClick={cargarMasDias}
+                  disabled={cargandoMas}
+                  className="text-sm bg-slate-800 border border-slate-700 text-slate-300 px-5 py-2 rounded-lg hover:border-blue-500/60 hover:text-blue-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 mx-auto"
+                >
+                  {cargandoMas ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-slate-600 border-t-blue-400 rounded-full animate-spin" />
+                      Cargando 30 días más...
+                    </>
+                  ) : (
+                    "📅 Cargar 30 días más"
+                  )}
+                </button>
+              </div>
             )}
           </div>
         </div>
