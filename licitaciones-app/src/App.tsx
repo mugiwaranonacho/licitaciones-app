@@ -183,7 +183,7 @@ export default function App() {
   const [montoMax, setMontoMax] = useState("");
   const [montoRango, setMontoRango] = useState<"all" | "micro" | "pequeno" | "mediano" | "grande">("all");
   const [tipoFiltro, setTipoFiltro] = useState<"all" | "licitacion" | "compra_agil">("all");
-  const [filtrarNoRelevantes, setFiltrarNoRelevantes] = useState(true);
+  const [filtrarNoRelevantes, setFiltrarNoRelevantes] = useState(false);
   const [categoriaFiltro, setCategoriaFiltro] = useState<string>("all");
   const [newAlerts, setNewAlerts] = useState<string[]>([]);
   const [showNewBadge, setShowNewBadge] = useState(false);
@@ -223,17 +223,31 @@ export default function App() {
 
   // ── PAGINACIÓN ────────────────────────────────────────────────────────────
 
+  const fetchConRetry = async (url: string, intentos = 3): Promise<Response | null> => {
+    for (let i = 0; i < intentos; i++) {
+      const res = await fetch(url);
+      if (res.status === 429) {
+        console.warn(`429 en intento ${i + 1}, esperando ${(i + 1) * 5}s...`);
+        await new Promise((r) => setTimeout(r, (i + 1) * 5000));
+        continue;
+      }
+      return res;
+    }
+    return null;
+  };
+
   const fetchLicitacionesPaginadas = async (): Promise<LicitacionAPI[]> => {
     const acumulado: LicitacionAPI[] = [];
     const idsVistos = new Set<string>();
 
     setLoadingMsg("Cargando licitaciones recientes...");
     try {
-      const res = await fetch(`/api/mercadopublico?endpoint=licitaciones&estado=publicada`);
-      console.log("📡 HTTP status licitaciones:", res.status);
-      if (res.ok) {
+      // La API acepta estado como código numérico: 5 = publicada
+      const res = await fetchConRetry(`/api/mercadopublico?endpoint=licitaciones`);
+      console.log("📡 HTTP status licitaciones:", res?.status);
+      if (res && res.ok) {
         const data = await res.json();
-        console.log("📦 Respuesta API licitaciones:", JSON.stringify(data).slice(0, 500));
+        console.log("📦 Respuesta API licitaciones:", JSON.stringify(data).slice(0, 300));
         const listado: LicitacionAPI[] = data.Listado || [];
         listado.forEach((i) => {
           if (!idsVistos.has(i.CodigoExterno)) {
@@ -244,39 +258,6 @@ export default function App() {
       }
     } catch (err) {
       console.warn("Error cargando licitaciones base:", err);
-    }
-
-    for (let pagina = 0; pagina < MAX_PAGINAS; pagina++) {
-      await new Promise((r) => setTimeout(r, 3000));
-      setLoadingMsg(`Cargando más licitaciones... (${pagina + 1}/${MAX_PAGINAS})`);
-
-      const fechas = acumulado
-        .map((i) => i.FechaPublicacion || i.FechaCierre)
-        .filter(Boolean)
-        .map((f) => new Date(f!).getTime());
-
-      if (fechas.length === 0) break;
-      const masAntigua = new Date(Math.min(...fechas));
-      masAntigua.setDate(masAntigua.getDate() - 1);
-      const fechaHasta = masAntigua.toISOString().slice(0, 10).replace(/-/g, "");
-
-      try {
-        const res = await fetch(`/api/mercadopublico?endpoint=licitaciones&estado=publicada&fecha=${fechaHasta}`);
-        if (!res.ok) { console.warn(`Paginación detenida: HTTP ${res.status}`); break; }
-        const data = await res.json();
-        const listado: LicitacionAPI[] = data.Listado || [];
-        if (listado.length === 0) break;
-        const nuevas = listado.filter((i) => {
-          if (idsVistos.has(i.CodigoExterno)) return false;
-          idsVistos.add(i.CodigoExterno);
-          return true;
-        });
-        acumulado.push(...nuevas);
-        if (listado.length < 10) break;
-      } catch (err) {
-        console.warn("Error paginación:", err);
-        break;
-      }
     }
 
     return acumulado;
@@ -318,11 +299,11 @@ export default function App() {
 
       const [listadoLic, resOC] = await Promise.all([
         fetchLicitacionesPaginadas(),
-        fetch(`/api/mercadopublico?endpoint=ordenesdecompra`),
+        fetchConRetry(`/api/mercadopublico?endpoint=ordenesdecompra`),
       ]);
 
       setLoadingMsg("Cargando compras ágiles...");
-      const dataOC = await resOC.json();
+      const dataOC = resOC && resOC.ok ? await resOC.json() : { Listado: [] };
       console.log("📦 Respuesta API OC:", JSON.stringify(dataOC).slice(0, 300));
       const listadoOC: OrdenCompraAPI[] = dataOC.Listado || [];
 
@@ -424,7 +405,7 @@ export default function App() {
     let result = searchResults !== null
       ? mapped
       : mapped.filter((i) => i.title.toLowerCase().includes(search.toLowerCase()));
-    if (filtrarNoRelevantes) result = result.filter((i) => i.esRelevante !== false);
+    if (filtrarNoRelevantes && searchResults !== null) result = result.filter((i) => i.esRelevante !== false);
     if (vistaFavoritos) result = result.filter((i) => favorites.includes(i.id));
     if (status === "open") result = result.filter((i) => new Date(i.close) >= now);
     if (status === "closed") result = result.filter((i) => new Date(i.close) < now);
