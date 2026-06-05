@@ -236,30 +236,56 @@ export default function App() {
     return null;
   };
 
+  // Formatea fecha a ddmmaaaa requerido por la API
+  const toFechaAPI = (date: Date) => {
+    const d = String(date.getDate()).padStart(2, "0");
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const y = date.getFullYear();
+    return `${d}${m}${y}`;
+  };
+
   const fetchLicitacionesPaginadas = async (): Promise<LicitacionAPI[]> => {
     const acumulado: LicitacionAPI[] = [];
     const idsVistos = new Set<string>();
 
-    setLoadingMsg("Cargando licitaciones recientes...");
-    try {
-      // La API acepta estado como código numérico: 5 = publicada
-      const res = await fetchConRetry(`/api/mercadopublico?endpoint=licitaciones`);
-      console.log("📡 HTTP status licitaciones:", res?.status);
-      if (res && res.ok) {
-        const data = await res.json();
-        console.log("📦 Respuesta API licitaciones:", JSON.stringify(data).slice(0, 300));
-        const listado: LicitacionAPI[] = data.Listado || [];
-        listado.forEach((i) => {
-          if (!idsVistos.has(i.CodigoExterno)) {
-            idsVistos.add(i.CodigoExterno);
-            acumulado.push(i);
-          }
-        });
+    // Traer licitaciones de los últimos 30 días de a 5 días por vez
+    const DIAS_ATRAS = 30;
+    const BATCH = 5;
+
+    for (let offset = 0; offset < DIAS_ATRAS; offset += BATCH) {
+      const promesas = [];
+      for (let d = offset; d < offset + BATCH && d < DIAS_ATRAS; d++) {
+        const fecha = new Date();
+        fecha.setDate(fecha.getDate() - d);
+        promesas.push(
+          fetchConRetry(`/api/mercadopublico?endpoint=licitaciones&estado=publicada&fecha=${toFechaAPI(fecha)}`)
+            .then(async (res) => {
+              if (!res || !res.ok) return [];
+              const data = await res.json();
+              return (data.Listado || []) as LicitacionAPI[];
+            })
+            .catch(() => [] as LicitacionAPI[])
+        );
       }
-    } catch (err) {
-      console.warn("Error cargando licitaciones base:", err);
+
+      setLoadingMsg(`Cargando licitaciones... (últimos ${offset + BATCH} días)`);
+      const resultados = await Promise.all(promesas);
+      for (const listado of resultados) {
+        for (const item of listado) {
+          if (!idsVistos.has(item.CodigoExterno)) {
+            idsVistos.add(item.CodigoExterno);
+            acumulado.push(item);
+          }
+        }
+      }
+
+      // Pausa entre batches para no saturar la API
+      if (offset + BATCH < DIAS_ATRAS) {
+        await new Promise((r) => setTimeout(r, 1500));
+      }
     }
 
+    console.log("📦 Total licitaciones acumuladas:", acumulado.length);
     return acumulado;
   };
 
